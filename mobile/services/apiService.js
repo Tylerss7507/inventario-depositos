@@ -1,7 +1,7 @@
 // Servicio de conexión al backend proxy.
 // La app NUNCA llama a sheets.googleapis.com directamente: solo a tu backend,
 // que es el único que conoce la Service Account.
-const API_BASE_URL = 'https://TU-BACKEND.example.com/api'; // <-- configurar
+const API_BASE_URL = 'https://inventario-depositos.onrender.com/api'; // <-- configurar
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
