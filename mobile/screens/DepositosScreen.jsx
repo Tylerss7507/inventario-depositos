@@ -11,8 +11,10 @@ import {
   ActivityIndicator,
   IconButton,
   Text,
+  Avatar,
 } from 'react-native-paper';
 import { useInventoryStore } from '../store/useInventoryStore';
+import { theme } from '../theme';
 
 export default function DepositosScreen({ navigation }) {
   const {
@@ -26,7 +28,7 @@ export default function DepositosScreen({ navigation }) {
 
   const [dialogVisible, setDialogVisible] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(null); // depósito a eliminar
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     fetchDepositos();
@@ -43,11 +45,11 @@ export default function DepositosScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Appbar.Header>
-        <Appbar.Content title="Depósitos" />
+      <Appbar.Header style={{ backgroundColor: theme.colors.primary }} dark>
+        <Appbar.Content title="Depósitos" titleStyle={styles.headerTitle} />
       </Appbar.Header>
 
-      {loadingDepositos && <ActivityIndicator style={{ marginTop: 24 }} animating />}
+      {loadingDepositos && <ActivityIndicator style={{ marginTop: 24 }} animating color={theme.colors.primary} />}
       {errorDepositos && <Text style={styles.error}>{errorDepositos}</Text>}
 
       <FlatList
@@ -55,12 +57,17 @@ export default function DepositosScreen({ navigation }) {
         keyExtractor={(item) => String(item.sheetId)}
         onRefresh={fetchDepositos}
         refreshing={loadingDepositos}
+        contentContainerStyle={{ paddingVertical: 8 }}
         renderItem={({ item }) => (
           <List.Item
             title={item.titulo}
-            left={(props) => <List.Icon {...props} icon="warehouse" />}
+            titleStyle={styles.itemTitle}
+            style={styles.listItem}
+            left={() => (
+              <Avatar.Icon size={44} icon="warehouse" style={{ backgroundColor: theme.colors.secondary }} />
+            )}
             right={(props) => (
-              <IconButton {...props} icon="delete" onPress={() => setConfirmDelete(item)} />
+              <IconButton {...props} icon="delete" iconColor="#C62828" onPress={() => setConfirmDelete(item)} />
             )}
             onPress={() =>
               navigation.navigate('DepositoDetail', {
@@ -72,10 +79,14 @@ export default function DepositosScreen({ navigation }) {
         )}
       />
 
-      <FAB style={styles.fab} icon="plus" onPress={() => setDialogVisible(true)} />
+      <FAB
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        icon="plus"
+        color="#fff"
+        onPress={() => setDialogVisible(true)}
+      />
 
       <Portal>
-        {/* Dialog: crear depósito */}
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
           <Dialog.Title>Nuevo depósito</Dialog.Title>
           <Dialog.Content>
@@ -84,6 +95,7 @@ export default function DepositosScreen({ navigation }) {
               value={nombreNuevo}
               onChangeText={setNombreNuevo}
               autoFocus
+              mode="outlined"
             />
           </Dialog.Content>
           <Dialog.Actions>
@@ -92,7 +104,6 @@ export default function DepositosScreen({ navigation }) {
           </Dialog.Actions>
         </Dialog>
 
-        {/* AlertDialog: confirmación obligatoria de borrado */}
         <Dialog visible={!!confirmDelete} onDismiss={() => setConfirmDelete(null)}>
           <Dialog.Title>¿Eliminar depósito?</Dialog.Title>
           <Dialog.Content>
@@ -104,7 +115,7 @@ export default function DepositosScreen({ navigation }) {
           <Dialog.Actions>
             <Button onPress={() => setConfirmDelete(null)}>Cancelar</Button>
             <Button
-              textColor="red"
+              textColor="#C62828"
               onPress={() => {
                 eliminarDeposito(confirmDelete.sheetId);
                 setConfirmDelete(null);
@@ -120,7 +131,10 @@ export default function DepositosScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
   fab: { position: 'absolute', right: 16, bottom: 16 },
   error: { color: 'red', textAlign: 'center', marginTop: 8 },
+  headerTitle: { fontWeight: 'bold' },
+  listItem: { backgroundColor: '#fff', marginHorizontal: 10, marginVertical: 4, borderRadius: 10 },
+  itemTitle: { fontWeight: '600' },
 });
