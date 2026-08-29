@@ -37,17 +37,17 @@ jobs:
       - name: Dar permisos a gradlew
         run: chmod +x android/gradlew
 
-      - name: Compilar APK (debug, sin firma release)
+      - name: Compilar APK release (JS empaquetado, autocontenido)
         working-directory: mobile/android
         env:
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Subir como artifact
         uses: actions/upload-artifact@v4
         with:
-          name: inventario-app-debug
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: inventario-app-release
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
 
       - name: Publicar como Release descargable
         uses: softprops/action-gh-release@v2
@@ -55,6 +55,6 @@ jobs:
           tag_name: latest-build
           name: "Última build"
           prerelease: true
-          files: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          files: mobile/android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
