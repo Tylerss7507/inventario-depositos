@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DepositosScreen from './screens/DepositosScreen';
 import DepositoDetailScreen from './screens/DepositoDetailScreen';
 import { theme } from './theme';
+import { useInventoryStore } from './store/useInventoryStore';
 
 const Stack = createNativeStackNavigator();
 
@@ -15,6 +16,10 @@ export default function App() {
   const [fontsLoaded] = useFonts({
     ...MaterialCommunityIcons.font,
   });
+
+  useEffect(() => {
+    useInventoryStore.getState().connectSocket();
+  }, []);
 
   if (!fontsLoaded) {
     return (

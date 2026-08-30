@@ -1,7 +1,5 @@
-// Servicio de conexión al backend proxy.
-// La app NUNCA llama a sheets.googleapis.com directamente: solo a tu backend,
-// que es el único que conoce la Service Account.
-const API_BASE_URL = 'https://inventario-depositos.onrender.com/api'; // <-- configurar
+const API_BASE_URL = 'https://inventario-depositos.onrender.com/api';
+export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws').replace(/\/api$/, '');
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -16,28 +14,35 @@ async function request(path, options = {}) {
 }
 
 export const apiService = {
-  // Depósitos
   listarDepositos: () => request('/depositos'),
 
   crearDeposito: (nombre) =>
     request('/depositos', { method: 'POST', body: JSON.stringify({ nombre }) }),
 
+  editarDeposito: (sheetId, nombre) =>
+    request(`/depositos/${sheetId}`, { method: 'PUT', body: JSON.stringify({ nombre }) }),
+
   eliminarDeposito: (sheetId) => request(`/depositos/${sheetId}`, { method: 'DELETE' }),
 
-  // Items
   listarItems: (nombreDeposito) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`),
 
-  agregarItem: (nombreDeposito, idItem, nombreItem, cantidad) =>
+  agregarItem: (nombreDeposito, idItem, nombreItem, cantidad, icono) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`, {
       method: 'POST',
-      body: JSON.stringify({ idItem, nombreItem, cantidad }),
+      body: JSON.stringify({ idItem, nombreItem, cantidad, icono }),
     }),
 
   actualizarCantidad: (nombreDeposito, idItem, cantidad) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}`, {
       method: 'PUT',
       body: JSON.stringify({ cantidad }),
+    }),
+
+  editarItemCompleto: (nombreDeposito, idItem, { nombreItem, cantidad, icono }) =>
+    request(`/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}/completo`, {
+      method: 'PUT',
+      body: JSON.stringify({ nombreItem, cantidad, icono }),
     }),
 
   eliminarItem: (nombreDeposito, idItem, sheetId) =>

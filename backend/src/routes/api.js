@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const sheetsService = require('../services/googleSheetsService');
+const { broadcast } = require('../ws');
 
 // ============ DEPÓSITOS ============
 
-// GET /api/depositos
 router.get('/depositos', async (req, res) => {
   try {
     const depositos = await sheetsService.listarDepositos();
@@ -15,7 +15,6 @@ router.get('/depositos', async (req, res) => {
   }
 });
 
-// POST /api/depositos  { nombre }
 router.post('/depositos', async (req, res) => {
   try {
     const { nombre } = req.body;
@@ -23,6 +22,7 @@ router.post('/depositos', async (req, res) => {
       return res.status(400).json({ error: 'El nombre del depósito es obligatorio' });
     }
     const nuevo = await sheetsService.crearDeposito(nombre.trim());
+    broadcast({ type: 'depositos_changed' });
     res.status(201).json(nuevo);
   } catch (err) {
     console.error(err);
@@ -30,10 +30,26 @@ router.post('/depositos', async (req, res) => {
   }
 });
 
-// DELETE /api/depositos/:sheetId
+// Renombrar depósito
+router.put('/depositos/:sheetId', async (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre es obligatorio' });
+    }
+    await sheetsService.renombrarDeposito(req.params.sheetId, nombre.trim());
+    broadcast({ type: 'depositos_changed' });
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/depositos/:sheetId', async (req, res) => {
   try {
     await sheetsService.eliminarDeposito(req.params.sheetId);
+    broadcast({ type: 'depositos_changed' });
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -43,7 +59,6 @@ router.delete('/depositos/:sheetId', async (req, res) => {
 
 // ============ ITEMS ============
 
-// GET /api/depositos/:nombre/items
 router.get('/depositos/:nombre/items', async (req, res) => {
   try {
     const items = await sheetsService.listarItems(req.params.nombre);
@@ -54,14 +69,14 @@ router.get('/depositos/:nombre/items', async (req, res) => {
   }
 });
 
-// POST /api/depositos/:nombre/items  { idItem, nombreItem, cantidad }
 router.post('/depositos/:nombre/items', async (req, res) => {
   try {
-    const { idItem, nombreItem, cantidad } = req.body;
+    const { idItem, nombreItem, cantidad, icono } = req.body;
     if (!idItem || !nombreItem || cantidad === undefined) {
       return res.status(400).json({ error: 'idItem, nombreItem y cantidad son obligatorios' });
     }
-    await sheetsService.agregarItem(req.params.nombre, idItem, nombreItem, Number(cantidad));
+    await sheetsService.agregarItem(req.params.nombre, idItem, nombreItem, Number(cantidad), icono);
+    broadcast({ type: 'items_changed', deposito: req.params.nombre });
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -69,7 +84,7 @@ router.post('/depositos/:nombre/items', async (req, res) => {
   }
 });
 
-// PUT /api/depositos/:nombre/items/:idItem  { cantidad }
+// Ajuste rápido de cantidad (botones +/-)
 router.put('/depositos/:nombre/items/:idItem', async (req, res) => {
   try {
     const { cantidad } = req.body;
@@ -77,6 +92,7 @@ router.put('/depositos/:nombre/items/:idItem', async (req, res) => {
       return res.status(400).json({ error: 'cantidad es obligatoria' });
     }
     await sheetsService.actualizarCantidad(req.params.nombre, req.params.idItem, Number(cantidad));
+    broadcast({ type: 'items_changed', deposito: req.params.nombre });
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -84,7 +100,26 @@ router.put('/depositos/:nombre/items/:idItem', async (req, res) => {
   }
 });
 
-// DELETE /api/depositos/:nombre/items/:idItem?sheetId=123
+// Edición completa (nombre + cantidad + ícono) desde el diálogo de editar
+router.put('/depositos/:nombre/items/:idItem/completo', async (req, res) => {
+  try {
+    const { nombreItem, cantidad, icono } = req.body;
+    if (!nombreItem || cantidad === undefined) {
+      return res.status(400).json({ error: 'nombreItem y cantidad son obligatorios' });
+    }
+    await sheetsService.editarItemCompleto(req.params.nombre, req.params.idItem, {
+      nombreItem,
+      cantidad: Number(cantidad),
+      icono,
+    });
+    broadcast({ type: 'items_changed', deposito: req.params.nombre });
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/depositos/:nombre/items/:idItem', async (req, res) => {
   try {
     const { sheetId } = req.query;
@@ -92,6 +127,7 @@ router.delete('/depositos/:nombre/items/:idItem', async (req, res) => {
       return res.status(400).json({ error: 'sheetId es obligatorio como query param' });
     }
     await sheetsService.eliminarItem(sheetId, req.params.nombre, req.params.idItem);
+    broadcast({ type: 'items_changed', deposito: req.params.nombre });
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);

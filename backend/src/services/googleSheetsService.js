@@ -3,8 +3,6 @@ const { google } = require('googleapis');
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-// Autenticación Server-to-Server con Service Account (JWT), vía variables de entorno
-// (sin archivo de credenciales en disco, para poder deployar en Render u otros PaaS)
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -15,7 +13,7 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: 'v4', auth });
 
-// ============ DEPÓSITOS (Sheets / pestañas) ============
+// ============ DEPÓSITOS ============
 
 async function listarDepositos() {
   const res = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
@@ -34,7 +32,7 @@ async function crearDeposito(nombre) {
           addSheet: {
             properties: {
               title: nombre,
-              gridProperties: { rowCount: 1000, columnCount: 3 },
+              gridProperties: { rowCount: 1000, columnCount: 4 },
             },
           },
         },
@@ -46,9 +44,9 @@ async function crearDeposito(nombre) {
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${nombre}'!A1:C1`,
+    range: `'${nombre}'!A1:D1`,
     valueInputOption: 'RAW',
-    requestBody: { values: [['ID_Item', 'Nombre_Item', 'Cantidad']] },
+    requestBody: { values: [['ID_Item', 'Nombre_Item', 'Cantidad', 'Icono']] },
   });
 
   return { sheetId: nuevaHoja.sheetId, titulo: nuevaHoja.title };
@@ -63,27 +61,47 @@ async function eliminarDeposito(sheetId) {
   });
 }
 
+// Renombrar la pestaña (el depósito)
+async function renombrarDeposito(sheetId, nuevoNombre) {
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId: Number(sheetId), title: nuevoNombre },
+            fields: 'title',
+          },
+        },
+      ],
+    },
+  });
+}
+
+// ============ ITEMS ============
+
 async function listarItems(nombreDeposito) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${nombreDeposito}'!A2:C`,
+    range: `'${nombreDeposito}'!A2:D`,
   });
   const filas = res.data.values || [];
   return filas.map((fila, index) => ({
     idItem: fila[0],
     nombreItem: fila[1],
     cantidad: Number(fila[2] || 0),
+    icono: fila[3] || 'package-variant',
     rowIndex: index + 2,
   }));
 }
 
-async function agregarItem(nombreDeposito, idItem, nombreItem, cantidad) {
+async function agregarItem(nombreDeposito, idItem, nombreItem, cantidad, icono) {
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${nombreDeposito}'!A:C`,
+    range: `'${nombreDeposito}'!A:D`,
     valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
-    requestBody: { values: [[idItem, nombreItem, cantidad]] },
+    requestBody: { values: [[idItem, nombreItem, cantidad, icono || '']] },
   });
 }
 
@@ -100,6 +118,7 @@ async function _buscarFilaPorId(nombreDeposito, idItem) {
   return index;
 }
 
+// Ajuste rápido de cantidad (botones +/-), solo toca la columna C
 async function actualizarCantidad(nombreDeposito, idItem, nuevaCantidad) {
   const index = await _buscarFilaPorId(nombreDeposito, idItem);
   const rowNumber = index + 1;
@@ -108,6 +127,19 @@ async function actualizarCantidad(nombreDeposito, idItem, nuevaCantidad) {
     range: `'${nombreDeposito}'!C${rowNumber}`,
     valueInputOption: 'RAW',
     requestBody: { values: [[nuevaCantidad]] },
+  });
+  return rowNumber;
+}
+
+// Edición completa desde el diálogo (nombre + cantidad + ícono en un solo write)
+async function editarItemCompleto(nombreDeposito, idItem, { nombreItem, cantidad, icono }) {
+  const index = await _buscarFilaPorId(nombreDeposito, idItem);
+  const rowNumber = index + 1;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `'${nombreDeposito}'!B${rowNumber}:D${rowNumber}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[nombreItem, cantidad, icono || '']] },
   });
   return rowNumber;
 }
@@ -137,8 +169,10 @@ module.exports = {
   listarDepositos,
   crearDeposito,
   eliminarDeposito,
+  renombrarDeposito,
   listarItems,
   agregarItem,
   actualizarCantidad,
+  editarItemCompleto,
   eliminarItem,
 };

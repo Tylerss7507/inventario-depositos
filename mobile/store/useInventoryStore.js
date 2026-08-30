@@ -1,7 +1,41 @@
 import { create } from 'zustand';
-import { apiService } from '../services/apiService';
+import { apiService, WS_BASE_URL } from '../services/apiService';
+
+let socket = null;
+let reconnectTimer = null;
 
 export const useInventoryStore = create((set, get) => ({
+  // ============ Tiempo real ============
+  connectSocket: () => {
+    if (socket) return;
+    const abrirConexion = () => {
+      socket = new WebSocket(WS_BASE_URL);
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'depositos_changed') {
+            get().fetchDepositos();
+          } else if (msg.type === 'items_changed' && msg.deposito === get().depositoActivo) {
+            get().fetchItems(msg.deposito);
+          }
+        } catch (e) {
+          // mensaje no válido, se ignora
+        }
+      };
+
+      socket.onclose = () => {
+        socket = null;
+        reconnectTimer = setTimeout(abrirConexion, 3000);
+      };
+
+      socket.onerror = () => {
+        socket?.close();
+      };
+    };
+    abrirConexion();
+  },
+
   // ============ Depósitos ============
   depositos: [],
   loadingDepositos: false,
@@ -28,14 +62,26 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
+  renombrarDeposito: async (sheetId, nuevoNombre) => {
+    const anteriores = get().depositos;
+    set({
+      depositos: anteriores.map((d) =>
+        d.sheetId === sheetId ? { ...d, titulo: nuevoNombre } : d
+      ),
+    });
+    try {
+      await apiService.editarDeposito(sheetId, nuevoNombre);
+    } catch (err) {
+      set({ depositos: anteriores, errorDepositos: err.message });
+    }
+  },
+
   eliminarDeposito: async (sheetId) => {
     const anteriores = get().depositos;
-    // UI optimista: se quita de la lista al instante
     set({ depositos: anteriores.filter((d) => d.sheetId !== sheetId) });
     try {
       await apiService.eliminarDeposito(sheetId);
     } catch (err) {
-      // Rollback: la API no devolvió 200
       set({ depositos: anteriores, errorDepositos: err.message });
     }
   },
@@ -56,10 +102,10 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  agregarItem: async (idItem, nombreItem, cantidad) => {
+  agregarItem: async (idItem, nombreItem, cantidad, icono) => {
     const nombreDeposito = get().depositoActivo;
     try {
-      await apiService.agregarItem(nombreDeposito, idItem, nombreItem, cantidad);
+      await apiService.agregarItem(nombreDeposito, idItem, nombreItem, cantidad, icono);
       await get().fetchItems(nombreDeposito);
       return true;
     } catch (err) {
@@ -68,7 +114,21 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  // UI optimista para sumar/restar stock, con rollback si la API falla
+  editarItem: async (idItem, { nombreItem, cantidad, icono }) => {
+    const nombreDeposito = get().depositoActivo;
+    const anteriores = get().items;
+    set({
+      items: anteriores.map((i) =>
+        i.idItem === idItem ? { ...i, nombreItem, cantidad, icono } : i
+      ),
+    });
+    try {
+      await apiService.editarItemCompleto(nombreDeposito, idItem, { nombreItem, cantidad, icono });
+    } catch (err) {
+      set({ items: anteriores, errorItems: err.message });
+    }
+  },
+
   ajustarCantidad: async (idItem, delta) => {
     const nombreDeposito = get().depositoActivo;
     const anteriores = get().items;
@@ -77,18 +137,15 @@ export const useInventoryStore = create((set, get) => ({
 
     const nuevaCantidad = Math.max(0, itemActual.cantidad + delta);
 
-    // 1. Se actualiza la UI de inmediato
     set({
       items: anteriores.map((i) =>
         i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i
       ),
     });
 
-    // 2. Se confirma contra la API
     try {
       await apiService.actualizarCantidad(nombreDeposito, idItem, nuevaCantidad);
     } catch (err) {
-      // 3. Rollback si la respuesta no fue 200
       set({ items: anteriores, errorItems: err.message });
     }
   },

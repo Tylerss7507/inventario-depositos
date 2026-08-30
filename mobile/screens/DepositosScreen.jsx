@@ -23,11 +23,14 @@ export default function DepositosScreen({ navigation }) {
     errorDepositos,
     fetchDepositos,
     crearDeposito,
+    renombrarDeposito,
     eliminarDeposito,
   } = useInventoryStore();
 
   const [dialogVisible, setDialogVisible] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState('');
+  const [editando, setEditando] = useState(null);
+  const [nombreEditado, setNombreEditado] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
@@ -41,6 +44,17 @@ export default function DepositosScreen({ navigation }) {
       setNombreNuevo('');
       setDialogVisible(false);
     }
+  };
+
+  const abrirEdicion = (deposito) => {
+    setEditando(deposito);
+    setNombreEditado(deposito.titulo);
+  };
+
+  const handleGuardarEdicion = async () => {
+    if (!nombreEditado.trim()) return;
+    await renombrarDeposito(editando.sheetId, nombreEditado.trim());
+    setEditando(null);
   };
 
   return (
@@ -67,7 +81,10 @@ export default function DepositosScreen({ navigation }) {
               <Avatar.Icon size={44} icon="warehouse" style={{ backgroundColor: theme.colors.secondary }} />
             )}
             right={(props) => (
-              <IconButton {...props} icon="delete" iconColor="#C62828" onPress={() => setConfirmDelete(item)} />
+              <View style={styles.rowActions}>
+                <IconButton {...props} icon="pencil" onPress={() => abrirEdicion(item)} />
+                <IconButton {...props} icon="delete" iconColor="#C62828" onPress={() => setConfirmDelete(item)} />
+              </View>
             )}
             onPress={() =>
               navigation.navigate('DepositoDetail', {
@@ -90,13 +107,7 @@ export default function DepositosScreen({ navigation }) {
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
           <Dialog.Title>Nuevo depósito</Dialog.Title>
           <Dialog.Content>
-            <TextInput
-              label="Nombre del depósito"
-              value={nombreNuevo}
-              onChangeText={setNombreNuevo}
-              autoFocus
-              mode="outlined"
-            />
+            <TextInput label="Nombre del depósito" value={nombreNuevo} onChangeText={setNombreNuevo} autoFocus mode="outlined" />
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setDialogVisible(false)}>Cancelar</Button>
@@ -104,23 +115,25 @@ export default function DepositosScreen({ navigation }) {
           </Dialog.Actions>
         </Dialog>
 
+        <Dialog visible={!!editando} onDismiss={() => setEditando(null)}>
+          <Dialog.Title>Renombrar depósito</Dialog.Title>
+          <Dialog.Content>
+            <TextInput label="Nombre" value={nombreEditado} onChangeText={setNombreEditado} autoFocus mode="outlined" />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setEditando(null)}>Cancelar</Button>
+            <Button onPress={handleGuardarEdicion}>Guardar</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={!!confirmDelete} onDismiss={() => setConfirmDelete(null)}>
           <Dialog.Title>¿Eliminar depósito?</Dialog.Title>
           <Dialog.Content>
-            <Text>
-              ¿Eliminar depósito "{confirmDelete?.titulo}" y todo su contenido? Esta acción no
-              se puede deshacer.
-            </Text>
+            <Text>¿Eliminar depósito "{confirmDelete?.titulo}" y todo su contenido? Esta acción no se puede deshacer.</Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setConfirmDelete(null)}>Cancelar</Button>
-            <Button
-              textColor="#C62828"
-              onPress={() => {
-                eliminarDeposito(confirmDelete.sheetId);
-                setConfirmDelete(null);
-              }}
-            >
+            <Button textColor="#C62828" onPress={() => { eliminarDeposito(confirmDelete.sheetId); setConfirmDelete(null); }}>
               Eliminar
             </Button>
           </Dialog.Actions>
@@ -137,4 +150,5 @@ const styles = StyleSheet.create({
   headerTitle: { fontWeight: 'bold' },
   listItem: { backgroundColor: '#fff', marginHorizontal: 10, marginVertical: 4, borderRadius: 10 },
   itemTitle: { fontWeight: '600' },
+  rowActions: { flexDirection: 'row', alignItems: 'center' },
 });
