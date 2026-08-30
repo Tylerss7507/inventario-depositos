@@ -61,6 +61,7 @@ export default function DepositosScreen({ navigation }) {
     <View style={styles.container}>
       <Appbar.Header style={{ backgroundColor: theme.colors.primary }} dark>
         <Appbar.Content title="Depósitos" titleStyle={styles.headerTitle} />
+        <Appbar.Action icon="history" onPress={() => navigation.navigate('Historial')} />
       </Appbar.Header>
 
       {loadingDepositos && <ActivityIndicator style={{ marginTop: 24 }} animating color={theme.colors.primary} />}
@@ -77,31 +78,19 @@ export default function DepositosScreen({ navigation }) {
             title={item.titulo}
             titleStyle={styles.itemTitle}
             style={styles.listItem}
-            left={() => (
-              <Avatar.Icon size={44} icon="warehouse" style={{ backgroundColor: theme.colors.secondary }} />
-            )}
+            left={() => <Avatar.Icon size={44} icon="warehouse" style={{ backgroundColor: theme.colors.secondary }} />}
             right={(props) => (
               <View style={styles.rowActions}>
                 <IconButton {...props} icon="pencil" onPress={() => abrirEdicion(item)} />
                 <IconButton {...props} icon="delete" iconColor="#C62828" onPress={() => setConfirmDelete(item)} />
               </View>
             )}
-            onPress={() =>
-              navigation.navigate('DepositoDetail', {
-                nombre: item.titulo,
-                sheetId: item.sheetId,
-              })
-            }
+            onPress={() => navigation.navigate('DepositoDetail', { nombre: item.titulo, sheetId: item.sheetId })}
           />
         )}
       />
 
-      <FAB
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        icon="plus"
-        color="#fff"
-        onPress={() => setDialogVisible(true)}
-      />
+      <FAB style={[styles.fab, { backgroundColor: theme.colors.primary }]} icon="plus" color="#fff" onPress={() => setDialogVisible(true)} />
 
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>

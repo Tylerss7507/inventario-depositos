@@ -1,10 +1,29 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService, WS_BASE_URL } from '../services/apiService';
 
 let socket = null;
 let reconnectTimer = null;
 
 export const useInventoryStore = create((set, get) => ({
+  // ============ Usuario (apodo local) ============
+  usuario: null,
+  usuarioCargado: false,
+
+  cargarUsuario: async () => {
+    try {
+      const guardado = await AsyncStorage.getItem('usuario_apodo');
+      set({ usuario: guardado, usuarioCargado: true });
+    } catch (err) {
+      set({ usuarioCargado: true });
+    }
+  },
+
+  guardarUsuario: async (nombre) => {
+    await AsyncStorage.setItem('usuario_apodo', nombre);
+    set({ usuario: nombre });
+  },
+
   // ============ Tiempo real ============
   connectSocket: () => {
     if (socket) return;
@@ -53,7 +72,7 @@ export const useInventoryStore = create((set, get) => ({
 
   crearDeposito: async (nombre) => {
     try {
-      await apiService.crearDeposito(nombre);
+      await apiService.crearDeposito(nombre, get().usuario);
       await get().fetchDepositos();
       return true;
     } catch (err) {
@@ -64,13 +83,9 @@ export const useInventoryStore = create((set, get) => ({
 
   renombrarDeposito: async (sheetId, nuevoNombre) => {
     const anteriores = get().depositos;
-    set({
-      depositos: anteriores.map((d) =>
-        d.sheetId === sheetId ? { ...d, titulo: nuevoNombre } : d
-      ),
-    });
+    set({ depositos: anteriores.map((d) => (d.sheetId === sheetId ? { ...d, titulo: nuevoNombre } : d)) });
     try {
-      await apiService.editarDeposito(sheetId, nuevoNombre);
+      await apiService.editarDeposito(sheetId, nuevoNombre, get().usuario);
     } catch (err) {
       set({ depositos: anteriores, errorDepositos: err.message });
     }
@@ -80,7 +95,7 @@ export const useInventoryStore = create((set, get) => ({
     const anteriores = get().depositos;
     set({ depositos: anteriores.filter((d) => d.sheetId !== sheetId) });
     try {
-      await apiService.eliminarDeposito(sheetId);
+      await apiService.eliminarDeposito(sheetId, get().usuario);
     } catch (err) {
       set({ depositos: anteriores, errorDepositos: err.message });
     }
@@ -102,10 +117,10 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  agregarItem: async (idItem, nombreItem, cantidad, icono) => {
+  agregarItem: async (idItem, nombreItem, cantidad, icono, stockMinimo) => {
     const nombreDeposito = get().depositoActivo;
     try {
-      await apiService.agregarItem(nombreDeposito, idItem, nombreItem, cantidad, icono);
+      await apiService.agregarItem(nombreDeposito, idItem, nombreItem, cantidad, icono, stockMinimo, get().usuario);
       await get().fetchItems(nombreDeposito);
       return true;
     } catch (err) {
@@ -114,16 +129,14 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  editarItem: async (idItem, { nombreItem, cantidad, icono }) => {
+  editarItem: async (idItem, { nombreItem, cantidad, icono, stockMinimo }) => {
     const nombreDeposito = get().depositoActivo;
     const anteriores = get().items;
     set({
-      items: anteriores.map((i) =>
-        i.idItem === idItem ? { ...i, nombreItem, cantidad, icono } : i
-      ),
+      items: anteriores.map((i) => (i.idItem === idItem ? { ...i, nombreItem, cantidad, icono, stockMinimo } : i)),
     });
     try {
-      await apiService.editarItemCompleto(nombreDeposito, idItem, { nombreItem, cantidad, icono });
+      await apiService.editarItemCompleto(nombreDeposito, idItem, { nombreItem, cantidad, icono, stockMinimo }, get().usuario);
     } catch (err) {
       set({ items: anteriores, errorItems: err.message });
     }
@@ -136,15 +149,10 @@ export const useInventoryStore = create((set, get) => ({
     if (!itemActual) return;
 
     const nuevaCantidad = Math.max(0, itemActual.cantidad + delta);
-
-    set({
-      items: anteriores.map((i) =>
-        i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i
-      ),
-    });
+    set({ items: anteriores.map((i) => (i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i)) });
 
     try {
-      await apiService.actualizarCantidad(nombreDeposito, idItem, nuevaCantidad);
+      await apiService.actualizarCantidad(nombreDeposito, idItem, nuevaCantidad, get().usuario);
     } catch (err) {
       set({ items: anteriores, errorItems: err.message });
     }
@@ -155,9 +163,24 @@ export const useInventoryStore = create((set, get) => ({
     const anteriores = get().items;
     set({ items: anteriores.filter((i) => i.idItem !== idItem) });
     try {
-      await apiService.eliminarItem(nombreDeposito, idItem, sheetId);
+      await apiService.eliminarItem(nombreDeposito, idItem, sheetId, get().usuario);
     } catch (err) {
       set({ items: anteriores, errorItems: err.message });
+    }
+  },
+
+  // ============ Historial ============
+  historial: [],
+  loadingHistorial: false,
+  errorHistorial: null,
+
+  fetchHistorial: async () => {
+    set({ loadingHistorial: true, errorHistorial: null });
+    try {
+      const historial = await apiService.listarHistorial();
+      set({ historial, loadingHistorial: false });
+    } catch (err) {
+      set({ errorHistorial: err.message, loadingHistorial: false });
     }
   },
 }));

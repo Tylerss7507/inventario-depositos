@@ -16,38 +16,41 @@ async function request(path, options = {}) {
 export const apiService = {
   listarDepositos: () => request('/depositos'),
 
-  crearDeposito: (nombre) =>
-    request('/depositos', { method: 'POST', body: JSON.stringify({ nombre }) }),
+  crearDeposito: (nombre, usuario) =>
+    request('/depositos', { method: 'POST', body: JSON.stringify({ nombre, usuario }) }),
 
-  editarDeposito: (sheetId, nombre) =>
-    request(`/depositos/${sheetId}`, { method: 'PUT', body: JSON.stringify({ nombre }) }),
+  editarDeposito: (sheetId, nombre, usuario) =>
+    request(`/depositos/${sheetId}`, { method: 'PUT', body: JSON.stringify({ nombre, usuario }) }),
 
-  eliminarDeposito: (sheetId) => request(`/depositos/${sheetId}`, { method: 'DELETE' }),
+  eliminarDeposito: (sheetId, usuario) =>
+    request(`/depositos/${sheetId}`, { method: 'DELETE', body: JSON.stringify({ usuario }) }),
 
   listarItems: (nombreDeposito) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`),
 
-  agregarItem: (nombreDeposito, idItem, nombreItem, cantidad, icono) =>
+  agregarItem: (nombreDeposito, idItem, nombreItem, cantidad, icono, stockMinimo, usuario) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`, {
       method: 'POST',
-      body: JSON.stringify({ idItem, nombreItem, cantidad, icono }),
+      body: JSON.stringify({ idItem, nombreItem, cantidad, icono, stockMinimo, usuario }),
     }),
 
-  actualizarCantidad: (nombreDeposito, idItem, cantidad) =>
+  actualizarCantidad: (nombreDeposito, idItem, cantidad, usuario) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}`, {
       method: 'PUT',
-      body: JSON.stringify({ cantidad }),
+      body: JSON.stringify({ cantidad, usuario }),
     }),
 
-  editarItemCompleto: (nombreDeposito, idItem, { nombreItem, cantidad, icono }) =>
+  editarItemCompleto: (nombreDeposito, idItem, { nombreItem, cantidad, icono, stockMinimo }, usuario) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}/completo`, {
       method: 'PUT',
-      body: JSON.stringify({ nombreItem, cantidad, icono }),
+      body: JSON.stringify({ nombreItem, cantidad, icono, stockMinimo, usuario }),
     }),
 
-  eliminarItem: (nombreDeposito, idItem, sheetId) =>
+  eliminarItem: (nombreDeposito, idItem, sheetId, usuario) =>
     request(
       `/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}?sheetId=${sheetId}`,
-      { method: 'DELETE' }
+      { method: 'DELETE', body: JSON.stringify({ usuario }) }
     ),
+
+  listarHistorial: () => request('/historial'),
 };
