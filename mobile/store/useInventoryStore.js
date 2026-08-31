@@ -5,6 +5,12 @@ import { apiService, WS_BASE_URL } from '../services/apiService';
 let socket = null;
 let reconnectTimer = null;
 
+// Bookkeeping de debounce (fuera del estado de Zustand, no dispara renders)
+let debounceItemsChanged = null;
+let debounceDepositosChanged = null;
+const debounceCantidad = {}; // { [idItem]: timeoutId }
+const valorAntesDeLaRafaga = {}; // { [idItem]: cantidad previa a la primera pulsación de la ráfaga }
+
 export const useInventoryStore = create((set, get) => ({
   // ============ Usuario (apodo local) ============
   usuario: null,
@@ -34,9 +40,11 @@ export const useInventoryStore = create((set, get) => ({
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'depositos_changed') {
-            get().fetchDepositos();
+            clearTimeout(debounceDepositosChanged);
+            debounceDepositosChanged = setTimeout(() => get().fetchDepositosSilencioso(), 600);
           } else if (msg.type === 'items_changed' && msg.deposito === get().depositoActivo) {
-            get().fetchItems(msg.deposito);
+            clearTimeout(debounceItemsChanged);
+            debounceItemsChanged = setTimeout(() => get().fetchItemsSilencioso(msg.deposito), 600);
           }
         } catch (e) {
           // mensaje no válido, se ignora
@@ -67,6 +75,16 @@ export const useInventoryStore = create((set, get) => ({
       set({ depositos, loadingDepositos: false });
     } catch (err) {
       set({ errorDepositos: err.message, loadingDepositos: false });
+    }
+  },
+
+  // Igual que fetchDepositos pero sin mostrar el spinner (refresco de fondo)
+  fetchDepositosSilencioso: async () => {
+    try {
+      const depositos = await apiService.listarDepositos();
+      set({ depositos });
+    } catch (err) {
+      // fallo silencioso, no molesta con un refresco de fondo
     }
   },
 
@@ -117,6 +135,18 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
+  // Igual que fetchItems pero sin mostrar el spinner (refresco de fondo)
+  fetchItemsSilencioso: async (nombreDeposito) => {
+    try {
+      const items = await apiService.listarItems(nombreDeposito);
+      if (get().depositoActivo === nombreDeposito) {
+        set({ items });
+      }
+    } catch (err) {
+      // fallo silencioso
+    }
+  },
+
   agregarItem: async (idItem, nombreItem, cantidad, icono, stockMinimo) => {
     const nombreDeposito = get().depositoActivo;
     try {
@@ -142,20 +172,38 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  ajustarCantidad: async (idItem, delta) => {
+  // Ráfaga de +/-: actualiza al instante en pantalla, y recién 500ms
+  // después de la última pulsación manda UN solo pedido con el valor final
+  ajustarCantidad: (idItem, delta) => {
     const nombreDeposito = get().depositoActivo;
-    const anteriores = get().items;
-    const itemActual = anteriores.find((i) => i.idItem === idItem);
+    const itemActual = get().items.find((i) => i.idItem === idItem);
     if (!itemActual) return;
 
-    const nuevaCantidad = Math.max(0, itemActual.cantidad + delta);
-    set({ items: anteriores.map((i) => (i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i)) });
-
-    try {
-      await apiService.actualizarCantidad(nombreDeposito, idItem, nuevaCantidad, get().usuario);
-    } catch (err) {
-      set({ items: anteriores, errorItems: err.message });
+    if (!debounceCantidad[idItem]) {
+      valorAntesDeLaRafaga[idItem] = itemActual.cantidad;
     }
+
+    const nuevaCantidad = Math.max(0, itemActual.cantidad + delta);
+    set({
+      items: get().items.map((i) => (i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i)),
+    });
+
+    clearTimeout(debounceCantidad[idItem]);
+    debounceCantidad[idItem] = setTimeout(async () => {
+      const valorFinal = get().items.find((i) => i.idItem === idItem)?.cantidad;
+      delete debounceCantidad[idItem];
+      try {
+        await apiService.actualizarCantidad(nombreDeposito, idItem, valorFinal, get().usuario);
+      } catch (err) {
+        set({
+          items: get().items.map((i) =>
+            i.idItem === idItem ? { ...i, cantidad: valorAntesDeLaRafaga[idItem] } : i
+          ),
+          errorItems: err.message,
+        });
+      }
+      delete valorAntesDeLaRafaga[idItem];
+    }, 500);
   },
 
   eliminarItem: async (idItem, sheetId) => {
