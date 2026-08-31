@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { google } = require('googleapis');
 
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
@@ -20,47 +21,30 @@ async function listarDepositos() {
   const res = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
   return res.data.sheets
     .filter((s) => s.properties.title !== HOJA_HISTORIAL)
-    .map((s) => ({
-      sheetId: s.properties.sheetId,
-      titulo: s.properties.title,
-    }));
+    .map((s) => ({ sheetId: s.properties.sheetId, titulo: s.properties.title }));
 }
 
 async function crearDeposito(nombre) {
   const res = await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: {
-      requests: [
-        {
-          addSheet: {
-            properties: {
-              title: nombre,
-              gridProperties: { rowCount: 1000, columnCount: 5 },
-            },
-          },
-        },
-      ],
+      requests: [{ addSheet: { properties: { title: nombre, gridProperties: { rowCount: 1000, columnCount: 5 } } } }],
     },
   });
-
   const nuevaHoja = res.data.replies[0].addSheet.properties;
-
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `'${nombre}'!A1:E1`,
     valueInputOption: 'RAW',
     requestBody: { values: [['ID_Item', 'Nombre_Item', 'Cantidad', 'Icono', 'Stock_Minimo']] },
   });
-
   return { sheetId: nuevaHoja.sheetId, titulo: nuevaHoja.title };
 }
 
 async function eliminarDeposito(sheetId) {
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
-    requestBody: {
-      requests: [{ deleteSheet: { sheetId: Number(sheetId) } }],
-    },
+    requestBody: { requests: [{ deleteSheet: { sheetId: Number(sheetId) } }] },
   });
 }
 
@@ -69,12 +53,7 @@ async function renombrarDeposito(sheetId, nuevoNombre) {
     spreadsheetId: SPREADSHEET_ID,
     requestBody: {
       requests: [
-        {
-          updateSheetProperties: {
-            properties: { sheetId: Number(sheetId), title: nuevoNombre },
-            fields: 'title',
-          },
-        },
+        { updateSheetProperties: { properties: { sheetId: Number(sheetId), title: nuevoNombre }, fields: 'title' } },
       ],
     },
   });
@@ -108,8 +87,6 @@ async function agregarItem(nombreDeposito, idItem, nombreItem, cantidad, icono, 
   });
 }
 
-// Busca la fila por ID_Item y devuelve todos sus datos (para no tener que
-// hacer una lectura aparte cada vez que necesitamos el nombre para el historial)
 async function _buscarFila(nombreDeposito, idItem) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -162,12 +139,7 @@ async function eliminarItem(sheetId, nombreDeposito, idItem) {
       requests: [
         {
           deleteDimension: {
-            range: {
-              sheetId: Number(sheetId),
-              dimension: 'ROWS',
-              startIndex: index,
-              endIndex: index + 1,
-            },
+            range: { sheetId: Number(sheetId), dimension: 'ROWS', startIndex: index, endIndex: index + 1 },
           },
         },
       ],
@@ -176,22 +148,61 @@ async function eliminarItem(sheetId, nombreDeposito, idItem) {
   return { nombreItem };
 }
 
+// Mueve stock de un depósito a otro. Si en destino ya existe un ítem con el
+// mismo nombre, le suma la cantidad; si no existe, lo crea automáticamente.
+async function transferirItem(nombreOrigen, idItemOrigen, nombreDestino, cantidadATransferir) {
+  if (nombreOrigen === nombreDestino) {
+    throw new Error('El depósito de origen y destino no pueden ser el mismo');
+  }
+  if (cantidadATransferir <= 0) {
+    throw new Error('La cantidad a transferir debe ser mayor a 0');
+  }
+
+  const origen = await _buscarFila(nombreOrigen, idItemOrigen);
+  if (cantidadATransferir > origen.cantidad) {
+    throw new Error(`No hay suficiente stock: solo hay ${origen.cantidad} unidades de "${origen.nombreItem}"`);
+  }
+
+  const nuevaCantidadOrigen = origen.cantidad - cantidadATransferir;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `'${nombreOrigen}'!C${origen.index + 1}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [[nuevaCantidadOrigen]] },
+  });
+
+  const itemsDestino = await listarItems(nombreDestino);
+  const existente = itemsDestino.find(
+    (i) => i.nombreItem.trim().toLowerCase() === origen.nombreItem.trim().toLowerCase()
+  );
+
+  if (existente) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${nombreDestino}'!C${existente.rowIndex}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[existente.cantidad + cantidadATransferir]] },
+    });
+  } else {
+    const nuevoId = crypto.randomUUID();
+    await agregarItem(nombreDestino, nuevoId, origen.nombreItem, cantidadATransferir, origen.icono, origen.stockMinimo);
+  }
+
+  return { nombreItem: origen.nombreItem, cantidad: cantidadATransferir };
+}
+
 // ============ HISTORIAL ============
 
 async function asegurarHistorial() {
   const res = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
   const existe = res.data.sheets.some((s) => s.properties.title === HOJA_HISTORIAL);
   if (existe) return;
-
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: {
-      requests: [
-        { addSheet: { properties: { title: HOJA_HISTORIAL, gridProperties: { rowCount: 2000, columnCount: 4 } } } },
-      ],
+      requests: [{ addSheet: { properties: { title: HOJA_HISTORIAL, gridProperties: { rowCount: 2000, columnCount: 4 } } } }],
     },
   });
-
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `'${HOJA_HISTORIAL}'!A1:D1`,
@@ -210,7 +221,6 @@ async function registrarMovimiento(usuario, deposito, detalle) {
       requestBody: { values: [[new Date().toISOString(), usuario || 'Anónimo', deposito || '-', detalle]] },
     });
   } catch (err) {
-    // El historial nunca debe romper la acción principal si falla
     console.error('No se pudo registrar en el historial:', err.message);
   }
 }
@@ -237,6 +247,7 @@ module.exports = {
   actualizarCantidad,
   editarItemCompleto,
   eliminarItem,
+  transferirItem,
   asegurarHistorial,
   registrarMovimiento,
   listarHistorial,

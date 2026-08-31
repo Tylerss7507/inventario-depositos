@@ -8,6 +8,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DepositosScreen from './screens/DepositosScreen';
 import DepositoDetailScreen from './screens/DepositoDetailScreen';
 import HistorialScreen from './screens/HistorialScreen';
+import BusquedaGlobalScreen from './screens/BusquedaGlobalScreen';
+import EstadisticasScreen from './screens/EstadisticasScreen';
 import { theme } from './theme';
 import { useInventoryStore } from './store/useInventoryStore';
 
@@ -65,6 +67,8 @@ export default function App() {
           <Stack.Screen name="Depositos" component={DepositosScreen} options={{ headerShown: false }} />
           <Stack.Screen name="DepositoDetail" component={DepositoDetailScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Historial" component={HistorialScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="BusquedaGlobal" component={BusquedaGlobalScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="Estadisticas" component={EstadisticasScreen} options={{ headerShown: false }} />
         </Stack.Navigator>
       </NavigationContainer>
     </PaperProvider>

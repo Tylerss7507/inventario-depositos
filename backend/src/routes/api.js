@@ -155,4 +155,29 @@ router.get('/historial', async (req, res) => {
   }
 });
 
+// ============ TRANSFERENCIAS ============
+
+router.post('/transferencias', async (req, res) => {
+  try {
+    const { depositoOrigen, idItem, depositoDestino, cantidad, usuario } = req.body;
+    if (!depositoOrigen || !idItem || !depositoDestino || !cantidad) {
+      return res.status(400).json({ error: 'depositoOrigen, idItem, depositoDestino y cantidad son obligatorios' });
+    }
+    const sheetsService = require('../services/googleSheetsService');
+    const { broadcast } = require('../ws');
+    const resultado = await sheetsService.transferirItem(depositoOrigen, idItem, depositoDestino, Number(cantidad));
+    await sheetsService.registrarMovimiento(
+      usuario,
+      depositoOrigen,
+      `Transfirió ${resultado.cantidad}x "${resultado.nombreItem}" de "${depositoOrigen}" a "${depositoDestino}"`
+    );
+    broadcast({ type: 'items_changed', deposito: depositoOrigen });
+    broadcast({ type: 'items_changed', deposito: depositoDestino });
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

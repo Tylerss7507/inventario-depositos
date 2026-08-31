@@ -1,17 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
 import {
-  Appbar,
-  List,
-  FAB,
-  Portal,
-  Dialog,
-  TextInput,
-  Button,
-  ActivityIndicator,
-  IconButton,
-  Text,
-  Searchbar,
+  Appbar, List, FAB, Portal, Dialog, TextInput, Button, ActivityIndicator, IconButton, Text, Searchbar, Menu, Chip,
 } from 'react-native-paper';
 import uuid from 'react-native-uuid';
 import { useInventoryStore } from '../store/useInventoryStore';
@@ -20,10 +10,14 @@ import IconPicker from '../components/IconPicker';
 
 export default function DepositoDetailScreen({ route, navigation }) {
   const { nombre, sheetId } = route.params;
-  const { items, loadingItems, errorItems, fetchItems, agregarItem, editarItem, ajustarCantidad, eliminarItem } =
-    useInventoryStore();
+  const {
+    items, loadingItems, errorItems, fetchItems,
+    agregarItem, editarItem, ajustarCantidad, eliminarItem, transferirItem,
+    depositos, fetchDepositos,
+  } = useInventoryStore();
 
   const [busqueda, setBusqueda] = useState('');
+  const [menuAbierto, setMenuAbierto] = useState(null);
 
   const [dialogVisible, setDialogVisible] = useState(false);
   const [nombreItem, setNombreItem] = useState('');
@@ -37,10 +31,15 @@ export default function DepositoDetailScreen({ route, navigation }) {
   const [iconoEditado, setIconoEditado] = useState('package-variant');
   const [stockMinEditado, setStockMinEditado] = useState('');
 
+  const [transfiriendo, setTransfiriendo] = useState(null);
+  const [depositoDestinoSel, setDepositoDestinoSel] = useState(null);
+  const [cantidadTransferir, setCantidadTransferir] = useState('');
+
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     fetchItems(nombre);
+    fetchDepositos();
   }, [nombre]);
 
   const itemsFiltrados = useMemo(() => {
@@ -56,10 +55,7 @@ export default function DepositoDetailScreen({ route, navigation }) {
     const id = uuid.v4();
     const ok = await agregarItem(id, nombreItem.trim(), Number(cantidadItem) || 0, iconoItem, Number(stockMinItem) || 0);
     if (ok) {
-      setNombreItem('');
-      setCantidadItem('');
-      setIconoItem('package-variant');
-      setStockMinItem('');
+      setNombreItem(''); setCantidadItem(''); setIconoItem('package-variant'); setStockMinItem('');
       setDialogVisible(false);
     }
   };
@@ -81,6 +77,19 @@ export default function DepositoDetailScreen({ route, navigation }) {
       stockMinimo: Number(stockMinEditado) || 0,
     });
     setEditando(null);
+  };
+
+  const abrirTransferencia = (item) => {
+    setTransfiriendo(item);
+    setDepositoDestinoSel(null);
+    setCantidadTransferir('');
+  };
+
+  const handleTransferir = async () => {
+    const cant = Number(cantidadTransferir);
+    if (!cant || cant <= 0 || !depositoDestinoSel) return;
+    const ok = await transferirItem(transfiriendo.idItem, depositoDestinoSel, cant);
+    if (ok) { setTransfiriendo(null); setDepositoDestinoSel(null); setCantidadTransferir(''); }
   };
 
   return (
@@ -121,8 +130,15 @@ export default function DepositoDetailScreen({ route, navigation }) {
                 <View style={styles.rowActions}>
                   <IconButton icon="minus" mode="contained-tonal" size={18} onPress={() => ajustarCantidad(item.idItem, -1)} />
                   <IconButton icon="plus" mode="contained-tonal" size={18} onPress={() => ajustarCantidad(item.idItem, 1)} />
-                  <IconButton icon="pencil" mode="contained-tonal" size={18} onPress={() => abrirEdicion(item)} />
-                  <IconButton icon="delete" mode="contained-tonal" size={18} iconColor="#C62828" onPress={() => setConfirmDelete(item)} />
+                  <Menu
+                    visible={menuAbierto === item.idItem}
+                    onDismiss={() => setMenuAbierto(null)}
+                    anchor={<IconButton icon="dots-vertical" size={18} onPress={() => setMenuAbierto(item.idItem)} />}
+                  >
+                    <Menu.Item onPress={() => { setMenuAbierto(null); abrirEdicion(item); }} title="Editar" leadingIcon="pencil" />
+                    <Menu.Item onPress={() => { setMenuAbierto(null); abrirTransferencia(item); }} title="Transferir" leadingIcon="swap-horizontal" />
+                    <Menu.Item onPress={() => { setMenuAbierto(null); setConfirmDelete(item); }} title="Eliminar" leadingIcon="delete" titleStyle={{ color: '#C62828' }} />
+                  </Menu>
                 </View>
               )}
             />
@@ -141,10 +157,7 @@ export default function DepositoDetailScreen({ route, navigation }) {
             <TextInput label="Stock mínimo (opcional)" value={stockMinItem} onChangeText={setStockMinItem} mode="outlined" keyboardType="numeric" style={{ marginBottom: 12 }} />
             <IconPicker value={iconoItem} onChange={setIconoItem} />
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDialogVisible(false)}>Cancelar</Button>
-            <Button onPress={handleAgregar}>Agregar</Button>
-          </Dialog.Actions>
+          <Dialog.Actions><Button onPress={() => setDialogVisible(false)}>Cancelar</Button><Button onPress={handleAgregar}>Agregar</Button></Dialog.Actions>
         </Dialog>
 
         <Dialog visible={!!editando} onDismiss={() => setEditando(null)}>
@@ -155,22 +168,41 @@ export default function DepositoDetailScreen({ route, navigation }) {
             <TextInput label="Stock mínimo (opcional)" value={stockMinEditado} onChangeText={setStockMinEditado} mode="outlined" keyboardType="numeric" style={{ marginBottom: 12 }} />
             <IconPicker value={iconoEditado} onChange={setIconoEditado} />
           </Dialog.Content>
+          <Dialog.Actions><Button onPress={() => setEditando(null)}>Cancelar</Button><Button onPress={handleGuardarEdicion}>Guardar</Button></Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={!!transfiriendo} onDismiss={() => setTransfiriendo(null)}>
+          <Dialog.Title>Transferir "{transfiriendo?.nombreItem}"</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label={`Cantidad (disponible: ${transfiriendo?.cantidad})`}
+              value={cantidadTransferir}
+              onChangeText={setCantidadTransferir}
+              mode="outlined"
+              keyboardType="numeric"
+              style={{ marginBottom: 12 }}
+            />
+            <Text style={{ marginBottom: 8, color: '#666' }}>Depósito destino:</Text>
+            <View style={styles.chipsRow}>
+              {depositos.filter((d) => d.titulo !== nombre).map((d) => (
+                <Chip key={d.sheetId} selected={depositoDestinoSel === d.titulo} onPress={() => setDepositoDestinoSel(d.titulo)} style={styles.chip}>
+                  {d.titulo}
+                </Chip>
+              ))}
+            </View>
+          </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setEditando(null)}>Cancelar</Button>
-            <Button onPress={handleGuardarEdicion}>Guardar</Button>
+            <Button onPress={() => setTransfiriendo(null)}>Cancelar</Button>
+            <Button onPress={handleTransferir} disabled={!depositoDestinoSel || !cantidadTransferir}>Transferir</Button>
           </Dialog.Actions>
         </Dialog>
 
         <Dialog visible={!!confirmDelete} onDismiss={() => setConfirmDelete(null)}>
           <Dialog.Title>¿Eliminar ítem?</Dialog.Title>
-          <Dialog.Content>
-            <Text>¿Eliminar "{confirmDelete?.nombreItem}" del depósito? Esta acción no se puede deshacer.</Text>
-          </Dialog.Content>
+          <Dialog.Content><Text>¿Eliminar "{confirmDelete?.nombreItem}" del depósito? Esta acción no se puede deshacer.</Text></Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setConfirmDelete(null)}>Cancelar</Button>
-            <Button textColor="#C62828" onPress={() => { eliminarItem(confirmDelete.idItem, sheetId); setConfirmDelete(null); }}>
-              Eliminar
-            </Button>
+            <Button textColor="#C62828" onPress={() => { eliminarItem(confirmDelete.idItem, sheetId); setConfirmDelete(null); }}>Eliminar</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -191,4 +223,6 @@ const styles = StyleSheet.create({
   cantidadNumero: { fontWeight: 'bold', color: '#1565C0', fontSize: 15 },
   cantidadAlerta: { color: '#C62828' },
   rowActions: { flexDirection: 'row', alignItems: 'center' },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  chip: { marginRight: 6, marginBottom: 6 },
 });

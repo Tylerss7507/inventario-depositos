@@ -1,31 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
 import {
-  Appbar,
-  List,
-  FAB,
-  Portal,
-  Dialog,
-  TextInput,
-  Button,
-  ActivityIndicator,
-  IconButton,
-  Text,
-  Avatar,
+  Appbar, List, FAB, Portal, Dialog, TextInput, Button, ActivityIndicator, IconButton, Text, Avatar,
 } from 'react-native-paper';
 import { useInventoryStore } from '../store/useInventoryStore';
 import { theme } from '../theme';
 
 export default function DepositosScreen({ navigation }) {
-  const {
-    depositos,
-    loadingDepositos,
-    errorDepositos,
-    fetchDepositos,
-    crearDeposito,
-    renombrarDeposito,
-    eliminarDeposito,
-  } = useInventoryStore();
+  const { depositos, loadingDepositos, errorDepositos, fetchDepositos, crearDeposito, renombrarDeposito, eliminarDeposito } =
+    useInventoryStore();
 
   const [dialogVisible, setDialogVisible] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState('');
@@ -33,23 +16,15 @@ export default function DepositosScreen({ navigation }) {
   const [nombreEditado, setNombreEditado] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  useEffect(() => {
-    fetchDepositos();
-  }, []);
+  useEffect(() => { fetchDepositos(); }, []);
 
   const handleCrear = async () => {
     if (!nombreNuevo.trim()) return;
     const ok = await crearDeposito(nombreNuevo.trim());
-    if (ok) {
-      setNombreNuevo('');
-      setDialogVisible(false);
-    }
+    if (ok) { setNombreNuevo(''); setDialogVisible(false); }
   };
 
-  const abrirEdicion = (deposito) => {
-    setEditando(deposito);
-    setNombreEditado(deposito.titulo);
-  };
+  const abrirEdicion = (deposito) => { setEditando(deposito); setNombreEditado(deposito.titulo); };
 
   const handleGuardarEdicion = async () => {
     if (!nombreEditado.trim()) return;
@@ -61,6 +36,8 @@ export default function DepositosScreen({ navigation }) {
     <View style={styles.container}>
       <Appbar.Header style={{ backgroundColor: theme.colors.primary }} dark>
         <Appbar.Content title="Depósitos" titleStyle={styles.headerTitle} />
+        <Appbar.Action icon="magnify" onPress={() => navigation.navigate('BusquedaGlobal')} />
+        <Appbar.Action icon="chart-bar" onPress={() => navigation.navigate('Estadisticas')} />
         <Appbar.Action icon="history" onPress={() => navigation.navigate('Historial')} />
       </Appbar.Header>
 
@@ -95,36 +72,22 @@ export default function DepositosScreen({ navigation }) {
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
           <Dialog.Title>Nuevo depósito</Dialog.Title>
-          <Dialog.Content>
-            <TextInput label="Nombre del depósito" value={nombreNuevo} onChangeText={setNombreNuevo} autoFocus mode="outlined" />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDialogVisible(false)}>Cancelar</Button>
-            <Button onPress={handleCrear}>Crear</Button>
-          </Dialog.Actions>
+          <Dialog.Content><TextInput label="Nombre del depósito" value={nombreNuevo} onChangeText={setNombreNuevo} autoFocus mode="outlined" /></Dialog.Content>
+          <Dialog.Actions><Button onPress={() => setDialogVisible(false)}>Cancelar</Button><Button onPress={handleCrear}>Crear</Button></Dialog.Actions>
         </Dialog>
 
         <Dialog visible={!!editando} onDismiss={() => setEditando(null)}>
           <Dialog.Title>Renombrar depósito</Dialog.Title>
-          <Dialog.Content>
-            <TextInput label="Nombre" value={nombreEditado} onChangeText={setNombreEditado} autoFocus mode="outlined" />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setEditando(null)}>Cancelar</Button>
-            <Button onPress={handleGuardarEdicion}>Guardar</Button>
-          </Dialog.Actions>
+          <Dialog.Content><TextInput label="Nombre" value={nombreEditado} onChangeText={setNombreEditado} autoFocus mode="outlined" /></Dialog.Content>
+          <Dialog.Actions><Button onPress={() => setEditando(null)}>Cancelar</Button><Button onPress={handleGuardarEdicion}>Guardar</Button></Dialog.Actions>
         </Dialog>
 
         <Dialog visible={!!confirmDelete} onDismiss={() => setConfirmDelete(null)}>
           <Dialog.Title>¿Eliminar depósito?</Dialog.Title>
-          <Dialog.Content>
-            <Text>¿Eliminar depósito "{confirmDelete?.titulo}" y todo su contenido? Esta acción no se puede deshacer.</Text>
-          </Dialog.Content>
+          <Dialog.Content><Text>¿Eliminar depósito "{confirmDelete?.titulo}" y todo su contenido? Esta acción no se puede deshacer.</Text></Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setConfirmDelete(null)}>Cancelar</Button>
-            <Button textColor="#C62828" onPress={() => { eliminarDeposito(confirmDelete.sheetId); setConfirmDelete(null); }}>
-              Eliminar
-            </Button>
+            <Button textColor="#C62828" onPress={() => { eliminarDeposito(confirmDelete.sheetId); setConfirmDelete(null); }}>Eliminar</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

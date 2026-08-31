@@ -4,18 +4,15 @@ import { apiService, WS_BASE_URL } from '../services/apiService';
 
 let socket = null;
 let reconnectTimer = null;
-
-// Bookkeeping de debounce (fuera del estado de Zustand, no dispara renders)
 let debounceItemsChanged = null;
 let debounceDepositosChanged = null;
-const debounceCantidad = {}; // { [idItem]: timeoutId }
-const valorAntesDeLaRafaga = {}; // { [idItem]: cantidad previa a la primera pulsación de la ráfaga }
+const debounceCantidad = {};
+const valorAntesDeLaRafaga = {};
 
 export const useInventoryStore = create((set, get) => ({
-  // ============ Usuario (apodo local) ============
+  // ============ Usuario ============
   usuario: null,
   usuarioCargado: false,
-
   cargarUsuario: async () => {
     try {
       const guardado = await AsyncStorage.getItem('usuario_apodo');
@@ -24,7 +21,6 @@ export const useInventoryStore = create((set, get) => ({
       set({ usuarioCargado: true });
     }
   },
-
   guardarUsuario: async (nombre) => {
     await AsyncStorage.setItem('usuario_apodo', nombre);
     set({ usuario: nombre });
@@ -35,7 +31,6 @@ export const useInventoryStore = create((set, get) => ({
     if (socket) return;
     const abrirConexion = () => {
       socket = new WebSocket(WS_BASE_URL);
-
       socket.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
@@ -46,19 +41,13 @@ export const useInventoryStore = create((set, get) => ({
             clearTimeout(debounceItemsChanged);
             debounceItemsChanged = setTimeout(() => get().fetchItemsSilencioso(msg.deposito), 600);
           }
-        } catch (e) {
-          // mensaje no válido, se ignora
-        }
+        } catch (e) {}
       };
-
       socket.onclose = () => {
         socket = null;
         reconnectTimer = setTimeout(abrirConexion, 3000);
       };
-
-      socket.onerror = () => {
-        socket?.close();
-      };
+      socket.onerror = () => { socket?.close(); };
     };
     abrirConexion();
   },
@@ -78,14 +67,10 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  // Igual que fetchDepositos pero sin mostrar el spinner (refresco de fondo)
   fetchDepositosSilencioso: async () => {
     try {
-      const depositos = await apiService.listarDepositos();
-      set({ depositos });
-    } catch (err) {
-      // fallo silencioso, no molesta con un refresco de fondo
-    }
+      set({ depositos: await apiService.listarDepositos() });
+    } catch (err) {}
   },
 
   crearDeposito: async (nombre) => {
@@ -135,16 +120,11 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  // Igual que fetchItems pero sin mostrar el spinner (refresco de fondo)
   fetchItemsSilencioso: async (nombreDeposito) => {
     try {
       const items = await apiService.listarItems(nombreDeposito);
-      if (get().depositoActivo === nombreDeposito) {
-        set({ items });
-      }
-    } catch (err) {
-      // fallo silencioso
-    }
+      if (get().depositoActivo === nombreDeposito) set({ items });
+    } catch (err) {}
   },
 
   agregarItem: async (idItem, nombreItem, cantidad, icono, stockMinimo) => {
@@ -162,9 +142,7 @@ export const useInventoryStore = create((set, get) => ({
   editarItem: async (idItem, { nombreItem, cantidad, icono, stockMinimo }) => {
     const nombreDeposito = get().depositoActivo;
     const anteriores = get().items;
-    set({
-      items: anteriores.map((i) => (i.idItem === idItem ? { ...i, nombreItem, cantidad, icono, stockMinimo } : i)),
-    });
+    set({ items: anteriores.map((i) => (i.idItem === idItem ? { ...i, nombreItem, cantidad, icono, stockMinimo } : i)) });
     try {
       await apiService.editarItemCompleto(nombreDeposito, idItem, { nombreItem, cantidad, icono, stockMinimo }, get().usuario);
     } catch (err) {
@@ -172,21 +150,14 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
-  // Ráfaga de +/-: actualiza al instante en pantalla, y recién 500ms
-  // después de la última pulsación manda UN solo pedido con el valor final
   ajustarCantidad: (idItem, delta) => {
     const nombreDeposito = get().depositoActivo;
     const itemActual = get().items.find((i) => i.idItem === idItem);
     if (!itemActual) return;
-
-    if (!debounceCantidad[idItem]) {
-      valorAntesDeLaRafaga[idItem] = itemActual.cantidad;
-    }
+    if (!debounceCantidad[idItem]) valorAntesDeLaRafaga[idItem] = itemActual.cantidad;
 
     const nuevaCantidad = Math.max(0, itemActual.cantidad + delta);
-    set({
-      items: get().items.map((i) => (i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i)),
-    });
+    set({ items: get().items.map((i) => (i.idItem === idItem ? { ...i, cantidad: nuevaCantidad } : i)) });
 
     clearTimeout(debounceCantidad[idItem]);
     debounceCantidad[idItem] = setTimeout(async () => {
@@ -196,9 +167,7 @@ export const useInventoryStore = create((set, get) => ({
         await apiService.actualizarCantidad(nombreDeposito, idItem, valorFinal, get().usuario);
       } catch (err) {
         set({
-          items: get().items.map((i) =>
-            i.idItem === idItem ? { ...i, cantidad: valorAntesDeLaRafaga[idItem] } : i
-          ),
+          items: get().items.map((i) => (i.idItem === idItem ? { ...i, cantidad: valorAntesDeLaRafaga[idItem] } : i)),
           errorItems: err.message,
         });
       }
@@ -217,18 +186,101 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
+  transferirItem: async (idItem, depositoDestino, cantidad) => {
+    const depositoOrigen = get().depositoActivo;
+    try {
+      await apiService.transferirItem(depositoOrigen, idItem, depositoDestino, cantidad, get().usuario);
+      await get().fetchItems(depositoOrigen);
+      return true;
+    } catch (err) {
+      set({ errorItems: err.message });
+      return false;
+    }
+  },
+
   // ============ Historial ============
   historial: [],
   loadingHistorial: false,
   errorHistorial: null,
-
   fetchHistorial: async () => {
     set({ loadingHistorial: true, errorHistorial: null });
     try {
-      const historial = await apiService.listarHistorial();
-      set({ historial, loadingHistorial: false });
+      set({ historial: await apiService.listarHistorial(), loadingHistorial: false });
     } catch (err) {
       set({ errorHistorial: err.message, loadingHistorial: false });
+    }
+  },
+
+  // ============ Búsqueda global ============
+  busquedaGlobalResultados: [],
+  loadingBusquedaGlobal: false,
+  errorBusquedaGlobal: null,
+  buscarGlobal: async (query) => {
+    if (!query.trim()) {
+      set({ busquedaGlobalResultados: [] });
+      return;
+    }
+    set({ loadingBusquedaGlobal: true, errorBusquedaGlobal: null });
+    try {
+      const depositos = get().depositos.length ? get().depositos : await apiService.listarDepositos();
+      const porDeposito = await Promise.all(
+        depositos.map(async (d) => {
+          const items = await apiService.listarItems(d.titulo);
+          return items
+            .filter((i) => i.nombreItem.toLowerCase().includes(query.trim().toLowerCase()))
+            .map((i) => ({ ...i, deposito: d.titulo, sheetId: d.sheetId }));
+        })
+      );
+      set({ busquedaGlobalResultados: porDeposito.flat(), loadingBusquedaGlobal: false });
+    } catch (err) {
+      set({ errorBusquedaGlobal: err.message, loadingBusquedaGlobal: false });
+    }
+  },
+
+  // ============ Estadísticas ============
+  estadisticas: null,
+  loadingEstadisticas: false,
+  errorEstadisticas: null,
+  fetchEstadisticas: async () => {
+    set({ loadingEstadisticas: true, errorEstadisticas: null });
+    try {
+      const depositos = await apiService.listarDepositos();
+      const itemsPorDeposito = await Promise.all(
+        depositos.map(async (d) => ({ deposito: d.titulo, items: await apiService.listarItems(d.titulo) }))
+      );
+
+      let totalItems = 0;
+      let totalUnidades = 0;
+      let itemsBajoStock = 0;
+      let depositoConMasStock = '-';
+      let maxStock = -1;
+
+      itemsPorDeposito.forEach(({ deposito, items }) => {
+        totalItems += items.length;
+        const unidades = items.reduce((acc, i) => acc + i.cantidad, 0);
+        totalUnidades += unidades;
+        itemsBajoStock += items.filter((i) => i.stockMinimo > 0 && i.cantidad <= i.stockMinimo).length;
+        if (unidades > maxStock) {
+          maxStock = unidades;
+          depositoConMasStock = deposito;
+        }
+      });
+
+      const historialReciente = await apiService.listarHistorial();
+
+      set({
+        estadisticas: {
+          totalDepositos: depositos.length,
+          totalItems,
+          totalUnidades,
+          itemsBajoStock,
+          depositoConMasStock,
+          movimientosRecientes: historialReciente.slice(0, 5),
+        },
+        loadingEstadisticas: false,
+      });
+    } catch (err) {
+      set({ errorEstadisticas: err.message, loadingEstadisticas: false });
     }
   },
 }));

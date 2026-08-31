@@ -15,18 +15,11 @@ async function request(path, options = {}) {
 
 export const apiService = {
   listarDepositos: () => request('/depositos'),
+  crearDeposito: (nombre, usuario) => request('/depositos', { method: 'POST', body: JSON.stringify({ nombre, usuario }) }),
+  editarDeposito: (sheetId, nombre, usuario) => request(`/depositos/${sheetId}`, { method: 'PUT', body: JSON.stringify({ nombre, usuario }) }),
+  eliminarDeposito: (sheetId, usuario) => request(`/depositos/${sheetId}`, { method: 'DELETE', body: JSON.stringify({ usuario }) }),
 
-  crearDeposito: (nombre, usuario) =>
-    request('/depositos', { method: 'POST', body: JSON.stringify({ nombre, usuario }) }),
-
-  editarDeposito: (sheetId, nombre, usuario) =>
-    request(`/depositos/${sheetId}`, { method: 'PUT', body: JSON.stringify({ nombre, usuario }) }),
-
-  eliminarDeposito: (sheetId, usuario) =>
-    request(`/depositos/${sheetId}`, { method: 'DELETE', body: JSON.stringify({ usuario }) }),
-
-  listarItems: (nombreDeposito) =>
-    request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`),
+  listarItems: (nombreDeposito) => request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`),
 
   agregarItem: (nombreDeposito, idItem, nombreItem, cantidad, icono, stockMinimo, usuario) =>
     request(`/depositos/${encodeURIComponent(nombreDeposito)}/items`, {
@@ -47,10 +40,16 @@ export const apiService = {
     }),
 
   eliminarItem: (nombreDeposito, idItem, sheetId, usuario) =>
-    request(
-      `/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}?sheetId=${sheetId}`,
-      { method: 'DELETE', body: JSON.stringify({ usuario }) }
-    ),
+    request(`/depositos/${encodeURIComponent(nombreDeposito)}/items/${idItem}?sheetId=${sheetId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ usuario }),
+    }),
+
+  transferirItem: (depositoOrigen, idItem, depositoDestino, cantidad, usuario) =>
+    request('/transferencias', {
+      method: 'POST',
+      body: JSON.stringify({ depositoOrigen, idItem, depositoDestino, cantidad, usuario }),
+    }),
 
   listarHistorial: () => request('/historial'),
 };
